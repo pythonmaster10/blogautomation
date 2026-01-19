@@ -1,0 +1,55 @@
+import os
+import sys 
+from PyQt5.QtWidgets import *
+from PyQt5 import uic 
+import requests 
+from PIL import Image, ImageDraw, ImageFont 
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UI_PATH = "Thumb_make.ui" 
+
+class MainDialog(QDialog): 
+    def __init__(self): 
+        QDialog.__init__(self, None) 
+        uic.loadUi(os.path.join(BASE_DIR, UI_PATH), self) 
+        self.thumbnailmake.clicked.connect(self. Thumbnailmake_func) 
+        
+    def Thumbnailmake_func(self): 
+        key = self.imgkey.text()
+        API_KEY = self.pixakey.text() 
+        path = self.location.text() 
+        name = self.paragraph.text() 
+        url=f'https://pixabay.com/api/?key={API_KEY}&q={key}&image_type=photo&per_page=3' 
+        request = requests.get(url) 
+        json_data = request.json() 
+        image = json_data['hits'][0] 
+        img_url = image['largeImageURL'] 
+        r = requests.get(img_url, stream=True) 
+        address = path + '/' + str(name) + '.jpg' 
+        
+        with open(address , 'wb') as f: 
+            f.write(r.content) 
+        
+        with Image.open(address) as im: 
+            im_resized = im.resize((600, 600)) 
+        
+        draw = ImageDraw.Draw(im_resized) 
+        polygon_points = [(0, 200), (600,200), (600,400), (0, 400)] 
+        color = (0, 153, 153, 170) 
+        draw.polygon(polygon_points, fill = color) 
+        font = ImageFont.truetype(path + '/NanumGothic.ttf', 45) 
+        left, top, right, bottom = font.getbbox(name) 
+        height = bottom - top  
+        width = right - left 
+        width_line_location = 600 - width - (600 - width)/2 
+        height_line_location = 300 - height/2 
+        draw.text((width_line_location, height_line_location), name, font=font) 
+        im_resized.save(address) 
+            
+
+QApplication.setStyle("fusion") 
+app = QApplication(sys.argv) 
+main_dialog = MainDialog() 
+main_dialog.show() 
+sys.exit(app.exec_())
