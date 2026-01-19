@@ -1,0 +1,330 @@
+from PyQt5.QtWidgets import *
+from PyQt5 import uic
+from PyQt5.QtCore import *
+import sys
+import os
+from openai import OpenAI
+import json
+import requests
+from openpyxl import load_workbook
+
+
+def get_images_from_pixels_api(keyword, api_key, num_images):
+    base_url = "https://api.pexels.com/v1/search"
+    headers = {"Authorization": api_key}
+    params = {"query": keyword, "per_page": num_images}
+    
+    response = requests.get(base_url, headers=headers, params=params)
+    
+    if response.status_code == 200:
+        datas = response.json()
+        pixels_datas = datas['photos']
+        img_data = pixels_datas[0]['src']
+        
+        return img_data['portrait']
+    else:
+        print("Failed to fetch images from Pixels API")
+        return []
+    
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UI_PATH = "autogeneral_post.ui"
+
+
+class MainDialog(QDialog):
+    def __init__(self):
+        QDialog.__init__(self, None)
+        uic.loadUi(os.path.join(BASE_DIR, UI_PATH), self)
+        self.setWindowFlags(Qt.WindowCloseButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
+        self.makeatitle.clicked.connect(self.titlemake)
+        self.makeabook.clicked.connect(self.bookmaking)
+        self.posting.clicked.connect(self.autoposting)
+
+    def titlemake(self):
+        subject = self.subject_word.text()
+        excel_add = self.exceladd.text()
+        select_option = self.selectbox.currentText()
+
+        self.status_label.setText("소제목 생성중입니다.")
+        self.status_label.repaint()
+
+
+        if subject == "" or excel_add == "":
+            self.status_label.setText("빈 칸이 없는지 다시 확인하세요.")
+            self.status_label.repaint()
+    
+        else: 
+            try: 
+                wb = load_workbook(excel_add + '/autogeneral_info.xlsx')
+                active_sheet = wb['입력정보']
+                openai_api_key = active_sheet['B2']
+                OPENAI_API_KEY = openai_api_key.value
+            except:
+                self.status_label.setText("엑셀 저장 주소를 잘못 입력하였습니다.")
+                self.status_label.repaint()
+                return 0
+
+
+            # openai API 키 인증
+            os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+
+            # 모델 - GPT 3.5 Turbo 선택
+            client = OpenAI()
+
+
+            # 질문 작성하기
+            query =  subject + "에 대한 소제목 4개만 알려주고 각 소제목은 10자 내외로만 알려줘. 소제목엔" + subject + "이 반드시 들어가도록 해. 글자수는 표기하지말고."
+
+            try: 
+                self.sub_1.setText("")
+                self.sub_2.setText("")
+                self.sub_3.setText("")
+                self.sub_4.setText("")
+                answer_p = client.chat.completions.create(model=select_option,messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": query}])
+                answer = answer_p.choices[0].message.content 
+                answer_lists = answer.split("\n")
+                
+                self.sub_1.setText(answer_lists[0])
+                self.sub_2.setText(answer_lists[1])
+                self.sub_3.setText(answer_lists[2])
+                self.sub_4.setText(answer_lists[3])
+
+                self.status_label.setText("소제목 생성 완료")
+                self.status_label.repaint()
+
+            except:
+                self.status_label.setText("챗GPT 키 에러 혹은 호출제한(20초 대기 필요)")
+                self.status_label.repaint()
+
+
+    
+    def bookmaking(self):   #글생성 파트
+
+        
+        sentence_1 = self.sub_1.text()
+        sentence_2 = self.sub_2.text()
+        sentence_3 = self.sub_3.text()
+        sentence_4 = self.sub_4.text()
+        sentences = [sentence_1,sentence_2,sentence_3,sentence_4]
+
+        gpt_1 = self.gpt1.text()
+        gpt_2 = self.gpt2.text()
+        gpt_3 = self.gpt3.text()
+        gpt_4 = self.gpt4.text()
+        gpt_lists = [gpt_1, gpt_2, gpt_3, gpt_4]
+
+        excel_add = self.exceladd.text()
+        select_option = self.selectbox.currentText()
+        txt_word_lists = [] ## 본문 생성분 저장 리스트
+
+
+        if excel_add == "" or sentence_1 == "" and sentence_2 == "" and sentence_3 == "" and sentence_4 == "":
+            self.status_label.setText("엑셀 주소 혹은 챗GPT API키를 입력해주시고 소제목을 생성해주세요.")
+            self.status_label.repaint()
+            return 0 
+        
+        else:
+            for n in range(0,4):
+                if sentences[n] == "":
+                    txt_word_lists.append("")
+                    
+                else:
+                    try:
+                        wb = load_workbook(excel_add + '/autogeneral_info.xlsx')
+                        active_sheet = wb['입력정보']
+                        openai_api_key = active_sheet['B2']
+                        OPENAI_API_KEY = openai_api_key.value
+                    except:
+                        self.status_label.setText("엑셀 저장 주소를 잘못 입력하였습니다.")
+                        self.status_label.repaint()
+                        return 0
+                # openai API 키 인증
+                    else:
+                        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+                        self.status_label.setText("글 생성중-조금만 기다려주세요.")
+                        self.status_label.repaint()
+                    
+                        if gpt_lists[n] == "":
+                    # 질문 작성하기
+                            client = OpenAI()
+                            querys =  sentences[n] + "에 대한 내용을 500자 미만으로 작성해줘." 
+                        # 메시지 설정하기
+                
+                            try:
+                                answer_p = client.chat.completions.create(model=select_option,messages=[
+                                    {"role": "system", "content": "You are a helpful assistant."},
+                                    {"role": "user", "content": querys}])
+                                answer = answer_p.choices[0].message.content
+                
+                                txt_word_lists.append(answer)
+                            except:
+                                txt_word_lists.append("응답없음")
+                
+                        else:
+                        # 질문 작성하기
+                            client = OpenAI()
+                            querys =  sentences[n] + gpt_lists[n]
+                    # 메시지 설정하기
+    
+                            try:
+                                answer_p = client.chat.completions.create(model=select_option,messages=[
+                                    {"role": "system", "content": "You are a helpful assistant."},
+                                    {"role": "user", "content": querys}])
+                                answer = answer_p.choices[0].message.content
+                                txt_word_lists.append(answer)
+                            except:
+                                txt_word_lists.append("챗GPT 응답없음")
+
+       
+            self.txt_1.setPlainText(txt_word_lists[0])
+            self.txt_2.setPlainText(txt_word_lists[1])
+            self.txt_3.setPlainText(txt_word_lists[2])
+            self.txt_4.setPlainText(txt_word_lists[3])
+
+            self.status_label.setText("글 생성완료되었습니다.")
+            self.status_label.repaint()
+
+    def autoposting(self):
+
+        self.status_label.setText("워드프레스에 글을 등록중입니다.")
+        self.status_label.repaint()
+        
+        min_title_1 = self.sub_1.text()
+        min_title_2 = self.sub_2.text()
+        min_title_3 = self.sub_3.text()
+        min_title_4 = self.sub_4.text()
+
+        min_title_lists = [min_title_1, min_title_2, min_title_3, min_title_4]
+
+        title_1_word = self.txt_1.toPlainText()
+        title_2_word = self.txt_2.toPlainText()
+        title_3_word = self.txt_3.toPlainText()
+        title_4_word = self.txt_4.toPlainText()
+
+        title_word_lists = [title_1_word, title_2_word, title_3_word, title_4_word]
+        
+        title_name = self.title_word.text()
+        subjectword = self.subject_word.text()
+        excel_add = self.exceladd.text()
+        q = self.imgsub.text()
+        categaory = self.category_name.text()
+        path = excel_add
+        
+        body_main = ""
+
+        category = self.category_name.text()
+
+        if excel_add == "" or title_name == "" or path == "" or subjectword == "" or category == "" or q == "":
+            self.status_label.setText("입력값을 모두 잘 입력했는지 다시 확인해주세요.")
+            self.status_label.repaint()
+
+        else:
+            # openai API 키 인증
+            try: 
+                wb = load_workbook(excel_add + '/autogeneral_info.xlsx')
+                active_sheet = wb['입력정보']
+                open_api_key = active_sheet['B2']
+                DM_NAME = active_sheet['B6']
+                word_id = active_sheet['B4']
+                word_pw = active_sheet['B5']
+                api_key = active_sheet['B3']
+                PIXELS_API_KEY = api_key.value
+            
+                OPENAI_API_KEY = open_api_key.value
+                domain_name = DM_NAME.value
+                WORD_ID = word_id.value
+                WORD_PW = word_pw.value
+         
+            except:
+                self.status_label.setText("엑셀 저장 주소를 잘못 입력하였습니다.")
+                self.status_label.repaint()
+                return 0
+
+            else:
+                os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+                
+                if not os.path.exists(path + "/이미지자료"):
+                    os.makedirs(path + "/이미지자료")
+                            
+                try:
+                    image_url = get_images_from_pixels_api(q, PIXELS_API_KEY, 1)
+            
+                except:
+                    self.status_label.setText("Pixels API키 오류 혹은 사진정보가 없습니다.")
+                    self.status_label.repaint()
+                else:
+                    r = requests.get(image_url)
+                    filename = "썸네일.jpg"
+                    with open(path + "/이미지자료/" + filename,"wb") as outfile:
+                        outfile.write(r.content)
+                        
+                    try:
+                        img_url = domain_name + 'wp-json/wp/v2/media/'
+                        f = open(path + "/이미지자료" + "/" + filename, 'rb')
+                        image_data = f.read()
+                        filedata = bytes(filename, "utf-8").decode("unicode_escape")  
+                        headers = {'Content-Type': 'image/jpg','Content-Disposition': 'attachment; filename=%s' % filedata,}
+                        response_total = requests.post(img_url,data=image_data,headers=headers,auth=(WORD_ID,WORD_PW),)
+                        print(response_total.json())
+                        attachment_id = response_total.json()['id']
+        
+                        self.status_label.setText("사진을 업로드 완료.")
+                        self.status_label.repaint()
+
+                    except:
+                        self.status_label.setText("사진 업로드 오류. 워드프레스 접속상태 확인 요망.")
+                        self.status_label.repaint()
+                                
+                    else:
+                        self.status_label.setText("워드프레스에 글을 등록중입니다.")
+                        self.status_label.repaint()
+
+                            
+                        for i in range(0, 4):
+                            body_part = ""
+                            if min_title_lists[i] == "":
+                                body_part = ""
+                            else:
+                                body_part = f'''<h2 style="font-size: 20px; background: #0000FF; padding: 10px 15px; color: white;border-radius: 10px 0px 0px 0px;">{min_title_lists[i]}</h2><div>{title_word_lists[i]}</div><br></br>'''
+                                        
+                            body_main = body_main + body_part 
+                                    
+                        try:
+                            document = f'''<!DOCTYPE html>
+                                            <html>
+                                            <head>
+                                            </head>
+                                            <body>
+                                            {body_main}<br></br>
+                                            </body>
+                                            </html>
+                                            '''
+                                    
+                            payload = {"status": "publish",
+                                        "slug": subjectword,
+                                           "title": title_name,
+                                           "content": document,
+                                           "categories" : [int(categaory)],
+                                        #    "date": now.isoformat(),
+                                        }        
+                                        
+                            if attachment_id:
+                                payload['featured_media'] = attachment_id
+                                
+                            requests.post((domain_name + "/wp-json/wp/v2/posts"),
+                                data=json.dumps(payload),headers={'Content-type': "application/json"},auth=(WORD_ID, WORD_PW))
+                            self.status_label.setText("포스팅 완료입니다.")
+                            self.status_label.repaint()
+                                
+                        except:
+                            self.status_label.setText("포스팅 실패입니다.")
+                            self.status_label.repaint()
+    
+QApplication.setStyle("fusion")
+app = QApplication(sys.argv)
+main_dialog = MainDialog()
+main_dialog.show()
+
+sys.exit(app.exec_())
