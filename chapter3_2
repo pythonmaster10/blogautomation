@@ -1,0 +1,128 @@
+from PyQt5.QtWidgets import * 
+from PyQt5 import uic 
+from PyQt5.QtCore import * 
+import sys 
+from openpyxl import load_workbook 
+import requests 
+import json 
+import os 
+
+
+def images_pixels_api(keyword, api_key, maxImages): 
+    base_url = "https://api.pexels.com/v1/search" 
+    headers = {"Authorization": api_key} 
+    params = {"query": keyword, "per_page": maxImages} 
+    response = requests.get(base_url, headers=headers, params=params) 
+    if response.status_code == 200: 
+        datas = response.json() 
+        return datas 
+    
+    else: 
+        print("이미지 추출 실패") 
+        return [] 
+    
+def images_pixabay_api(keyword, api_key, num_images):
+    URL = f'https://pixabay.com/api/?key={api_key}&q={keyword}&image_type=photo&per_page={num_images}' 
+    res = requests.get(URL) 
+    if res.status_code == 200: 
+        text= res.text 
+        data = json.loads(text) 
+        return data 
+    
+    else: 
+        print("이미지 추출 실패") 
+        return [] 
+    
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) 
+UI_PATH = "imagemany.ui" 
+
+class MainDialog(QDialog): 
+    def __init__(self):
+        QDialog.__init__(self, None)
+        uic.loadUi(os.path.join(BASE_DIR, UI_PATH), self) 
+        self.setWindowFlags(Qt.WindowCloseButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint) 
+        self.extract.clicked.connect(self.extract_function) 
+    
+    def extract_function(self): 
+        key_idea = self.keyword.text() #검색 키워드 
+        path = self.excel_add.text() 
+        maxImages = self.extract_num.text() 
+        if key_idea == "" or path == "" or maxImages == "": 
+            self.status_label.setText("빈칸이 없는지 다시 확인하세요.") 
+            
+        elif int(maxImages) < 3 or int(maxImages) >= 200: 
+            self.status_label.setText("사진 개수는 3개 이상 200개 미만으로 입력하세요.") 
+            
+        else: 
+            self.status_label.setText("추출 중입니다.") 
+            self.status_label.repaint()
+            try:
+                wb = load_workbook(path + '/imagedown.xlsx')
+                active_sheet = wb['입력 정보'] 
+                pixabay_api = active_sheet['B2'] 
+                pixels_api = active_sheet['B3'] 
+                PIXABAY_API = pixabay_api.value 
+                PIXELS_API = pixels_api.value 
+            except: 
+                self.status_label.setText("엑셀 파일이 저장된 위치를 잘못 입력하였습니다.") 
+                return 0 
+            
+            else: 
+                if not os.path.exists(path + "/이미지 자료"): 
+                    os.makedirs(path + "/이미지 자료") 
+                    site_option = self.imagesite.currentText() 
+                    img_option = self.imagetype.currentText() 
+                    if site_option == 'pixabay': 
+                        try: 
+                            image_data = images_pixabay_api(key_idea, PIXABAY_API, maxImages) 
+                            pixa_datas = image_data['hits'] 
+                            for pixa_data in pixa_datas: 
+                                r = requests.get(pixa_data['largeImageURL']) 
+                                print(pixa_data['id']) 
+                                if img_option == "webp": 
+                                    filename = str(pixa_data['id']) + ".webp" 
+                                    with open(path + "/이미지 자료" + "/" + filename,"wb") as outfile: 
+                                        outfile.write(r.content) 
+                                elif img_option == "jpg": 
+                                    filename = str(pixa_data['id']) + ".jpg" 
+                                    with open(path + "/이미지 자료" + "/" + filename,"wb") as outfile: 
+                                        outfile.write(r.content) 
+                            self.status_label.setText("추출 완료되었습니다.") 
+                            self.status_label.repaint()
+                        except: 
+                            self.status_label.setText("추출 실패입니다.") 
+                            self.status_label.repaint()
+                            
+                    elif site_option == 'pixels': 
+                        try: 
+                            img_datas = images_pixels_api(key_idea, PIXELS_API, maxImages) 
+                            pixels_datas = img_datas['photos'] 
+                            for pixels_data in pixels_datas: 
+                                img_link = pixels_data['src'] 
+                                r = requests.get(img_link['portrait'])
+                                if img_option == "webp": 
+                                    filename = str(pixels_data['id']) + ".webp" 
+                                    with open(path + "/이미지 자료" + "/" + filename,"wb") as outfile: 
+                                        outfile.write(r.content) 
+                                        
+                                elif img_option == "jpg": 
+                                    filename = str(pixels_data['id']) + ".webp" 
+                                    with open(path + "/이미지 자료" + "/" + filename,"wb") as outfile: 
+                                        outfile.write(r.content) 
+                                        
+                            self.status_label.setText("추출 완료되었습니다.") 
+                            self.status_label.repaint()
+                                    
+                        except:
+                            self.status_label.setText("추출 실패입니다.") 
+                            self.status_label.repaint()
+
+                    else: 
+                        self.status_label.setText("인증키가 잘못되었습니다.") 
+                        self.status_label.repaint() 
+                            
+QApplication.setStyle("fusion") 
+app = QApplication(sys.argv) 
+main_dialog = MainDialog() 
+main_dialog.show() 
+sys.exit(app.exec_())
