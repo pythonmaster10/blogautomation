@@ -1,0 +1,51 @@
+from PyQt5.QtWidgets import * 
+from PyQt5 import uic 
+import sys 
+import os 
+import requests 
+from bs4 import BeautifulSoup 
+from summa import summarizer 
+import webbrowser 
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) 
+UI_PATH = "summarytext.ui" 
+
+class MainDialog(QDialog): 
+    def __init__(self): 
+        QDialog.__init__(self, None) 
+        uic.loadUi(UI_PATH, self) 
+        self.start_summary.clicked.connect(self.start_summary_func) 
+        self.go_to_youtube.clicked.connect(self.youtube_func) 
+        
+    def start_summary_func(self): 
+        self.status_label.setText('요약 중입니다') 
+        self.status_label.repaint()
+        
+        url = self.url_link.text() 
+        response = requests.get(url) 
+        soup = BeautifulSoup(response.text, 'html.parser') 
+        paragraphs = soup.find_all('p') 
+        texts = [] 
+        
+        for paragraph in paragraphs: 
+            texts.append(paragraph.get_text()) 
+        content = ''.join(texts) 
+        ratio = self.select_box.currentText() 
+        ratio = float(ratio) 
+            
+        if content != '': 
+            summary = summarizer.summarize(content, ratio = ratio) 
+            self.result_text.setPlainText(summary) 
+            self.status_label.setText('요약 완료입니다.') 
+            
+        else: 
+            self.status_label.setText('요약 실패입니다. 입력값을 확인하세요.') 
+            
+    def youtube_func(self): 
+        webbrowser.open('https://www.youtube.com/@pythonnblog') 
+        
+QApplication.setStyle("fusion") 
+app = QApplication(sys.argv) 
+main_dialog = MainDialog() 
+main_dialog.show() 
+sys.exit(app.exec_())
