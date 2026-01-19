@@ -1,0 +1,122 @@
+from PyQt5.QtWidgets import * 
+from PyQt5 import uic 
+from openai import OpenAI 
+import sys 
+import os 
+from openpyxl import load_workbook 
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) 
+UI_PATH = "gptmanycreate_bulk.ui" 
+
+class MainDialog(QDialog): 
+    def __init__(self):
+        QDialog.__init__(self, None) 
+        uic.loadUi(os.path.join(BASE_DIR, UI_PATH), self) 
+        self.text_extract_many.clicked.connect(self.text_extract_many_func) 
+        self.writing_result.clicked.connect(self.writing_result_func) 
+        
+    def text_extract_many_func(self): 
+        excel_address = self.exceladd.text() 
+        OPENAI_API_KEY = self.api_key.text() 
+        if excel_address == "" or OPENAI_API_KEY == "": 
+            self.status_label.setText("입력값을 모두 입력하세요.") 
+        else: 
+            keyword_list = [] 
+            self.status_label.setText("추출 중입니다.") 
+            self.status_label.repaint() 
+            os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY 
+
+            client = OpenAI() 
+
+            wb = load_workbook(excel_address + '/keywordset.xlsx') 
+
+            keyword_sheet = wb['키워드 리스트'] 
+            keywords = keyword_sheet['A'] 
+            for keyword in keywords: 
+                keyword_list.append(keyword.value) 
+            del keyword_list[0]
+            keyword_list = list(filter(None, keyword_list)) 
+            for i in range(0, len(keyword_list)): 
+                content_result = []
+                subtitle_lists = [] 
+                body_content = "" 
+                try: 
+                    order_message = keyword_list[i] + "에 대한 소제목 3개만 알려주고 각 소제목은 10자 내외로만 알려줘. 소제목엔" + keyword_list[i] + "이 반드시 들어가도록 해. 글자 수는 표기하지 말고." 
+                    completion = client.chat.completions.create(model="gpt-4o-mini",messages=[{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": order_message} ]) 
+                    
+                    result = completion.choices[0].message.content 
+                    subtitle_lists = result.split("\n") 
+                except: 
+                    self.status_label.setText("GPT오류. 소제목 추출에 실패했습니다.")
+                    
+                else:
+                    try: 
+                        for subtitle_list in subtitle_lists: 
+                            order_message = subtitle_list + "에 대한 내용을 500자 미만으로 작성해 줘." 
+                            completion = client.chat.completions.create(model="gpt-4o-mini",messages=[{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": order_message}]) 
+                            content_result.append(completion.choices[0].message.content) 
+                            
+                    except:
+                        self.status_label.setText("GPT오류. 본문 글 추출에 실패했습니다.") 
+                    
+                    else: 
+                        print(content_result) 
+                        
+                        for n in range(0, len(subtitle_lists)): 
+                            body_content = body_content + str(subtitle_lists[n]) + "\n" + "\n" + str(content_result[n]) + "\n" + "\n" 
+                        
+                        self.textresult.setPlainText(body_content)
+                        self.subtitle_1.setText(str(subtitle_lists[0])) 
+                        self.subtitle_2.setText(str(subtitle_lists[1])) 
+                        self.subtitle_3.setText(str(subtitle_lists[2]))
+
+                        f = open(excel_address + f"/{keyword_list[i]}.txt", "a") 
+                        f.write(body_content) 
+                        f.close() 
+                        self.status_label.setText("추출 완료입니다.") 
+                        
+    def writing_result_func(self): 
+        subject = self.topic.text() 
+        OPENAI_API_KEY = self.api_key.text() 
+        if subject == "" or OPENAI_API_KEY == "": 
+            self.status_label.setText("입력값을 모두 입력하세요.") 
+        else: 
+            self.status_label.setText("추출 중입니다.") 
+            self.status_label.repaint() 
+            subtitle_lists = [] ## 소제목 리스트 
+            content_result = [] ## 소제목 하위 글 리스트 
+            body_content = "" ## 최종 글 
+            os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY 
+            client = OpenAI() 
+            try:
+                order_message = subject + "에 대한 소제목 3개만 알려주고 각 소제목은 10자 내외로만 알려줘. 소제목엔" + subject + "이 반드시 들어가도록 해. 글자 수는 표기하지 말고." 
+                completion = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "system", "content": "You are a helpful assistant."}, {"role":"user", "content": order_message}])
+                result = completion.choices[0].message.content 
+                subtitle_lists = result.split("\n") 
+            except: 
+                self.status_label.setText("GPT오류. 소제목 추출에 실패했습니다.") 
+            else:
+                try:
+                    for subtitle_list in subtitle_lists: 
+                        order_message = subtitle_list + "에 대한 내용을 500자 미만으로 작성해 줘." 
+                        completion = client.chat.completions.create(model="gpt-4o-mini",messages=[{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": order_message}]) 
+                        content_result.append(completion.choices[0].message.content) 
+                        
+                except: 
+                    self.status_label.setText("GPT오류. 본문 글 추출에 실패했습니다.") 
+                    
+                else: 
+                    for i in range(0, len(subtitle_lists)): 
+                        body_content = body_content + str(subtitle_lists[i]) + "\n" + "\n" + str(content_result[i]) + "\n" + "\n" 
+                        self.textresult.setPlainText(body_content) 
+                        self.subtitle_1.setText(str(subtitle_lists[0])) 
+                        self.subtitle_2.setText(str(subtitle_lists[1])) 
+                        self.subtitle_3.setText(str(subtitle_lists[2])) 
+                        self.status_label.setText("추출 완료입니다.") 
+                        
+QApplication.setStyle("fusion") 
+app = QApplication(sys.argv) 
+main_dialog = MainDialog() 
+main_dialog.show() 
+sys.exit(app.exec_())
+                
