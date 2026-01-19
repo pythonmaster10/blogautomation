@@ -1,0 +1,113 @@
+from PyQt5.QtWidgets import * 
+from PyQt5 import uic 
+import os 
+import sys 
+import requests 
+from bs4 import BeautifulSoup 
+import re 
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) 
+UI_PATH = "site_analyize.ui" 
+
+class MainDialog(QDialog): 
+    def __init__(self): 
+        QDialog.__init__(self, None) 
+        uic.loadUi(os.path.join(BASE_DIR, UI_PATH), self)
+        self.analyize_function.clicked.connect(self.analyize_url_func) 
+    
+    def analyize_url_func(self): 
+        site_url = self.wordpress_url.text() 
+        if site_url == "": 
+            self.status_label.setText("사이트 주소를 입력해 주세요.") ## 요소들 크롤링 
+        else: 
+            try: 
+                site_identity = re.search(r"https://([a-z]+)\.([a-z]+)/(.+)", site_url)
+                if site_identity: 
+                    print(site_identity) 
+                    found = site_identity.group(1) 
+                    print(found) 
+                    
+                else: 
+                    self.status_label.setText("사이트 패턴이 발견되지 못했습니다.") 
+                    H2_tag_lists = [] 
+                    H3_tag_lists = [] 
+                    posting_area = [] 
+                    p_tag_text = []
+
+                p_tag_text_list = [] 
+                self.status_label.setText("분석중입니다. ") 
+                response = requests.get(site_url) 
+                soup = BeautifulSoup(response.text, 'html.parser') 
+                H2_tag_lists = soup.find_all("h2") 
+                H3_tag_lists = soup.find_all("h3") 
+                posting_area = soup.select('.ast-post-format-.single-layout-1') 
+                p_tag_text_lists = posting_area[0].find_all('p') 
+                for p_tag_text in p_tag_text_lists: 
+                    p_tag_text_list.append(p_tag_text.text) 
+                
+                p_tag_text_total = "".join(p_tag_text_list) 
+                p_length = len(p_tag_text_total) 
+                internal_links = [] 
+                external_links = [] 
+                links_lists = posting_area[0].find_all('a') 
+                for links_list in links_lists: 
+                    if found in links_list:
+                        internal_links.append(links_list) 
+                    else: 
+                        external_links.append(links_list) 
+                        
+                score = 5 
+                
+                if len(H2_tag_lists) >= 2 and len(H3_tag_lists) >=4: 
+                    score = score + 10 
+                else: 
+                    score = score + 5 
+                    
+                if len(H2_tag_lists) < len(H3_tag_lists): 
+                    score = score + 30 
+                else: 
+                    score = score + 15 
+                    
+                if p_length >= 300: 
+                    score = score + 10 
+                    
+                else:
+                    score = score + 5 
+                
+                if len(external_links) != 0: 
+                    score = score + 10
+                    
+                else: 
+                    score = score + 5 
+                    
+                if len(internal_links) != 0: 
+                    score = score + 10 
+                    
+                else: 
+                    score = score + 5 
+                    
+                message = "" 
+                
+                if score <= 30: 
+                    message = "최악입니다." 
+                
+                elif score > 30 and score < 50: 
+                    message = "보통입니다." 
+                    
+                else: 
+                    message = "잘하셨습니다." 
+                    
+                self.number_h2.setText(str(len(H2_tag_lists)) + "개") 
+                self.number_h3.setText(str(len(H3_tag_lists)) + "개") 
+                self.paralength.setText(str(p_length) + "글자") 
+                self.resule_score.setPlainText("최종 점수: " + str(score) + "점" + "\n" + message) 
+                self.status_label.setText("분석 완료입니다. ") 
+                
+            except: 
+                self.status_label.setText("사이트 오류입니다. ") 
+                
+QApplication.setStyle("fusion") 
+app = QApplication(sys.argv) 
+main_dialog = MainDialog() 
+main_dialog.show() 
+sys.exit(app.exec_())
