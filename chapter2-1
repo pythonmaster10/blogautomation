@@ -1,0 +1,98 @@
+from PyQt5.QtWidgets import * 
+from PyQt5 import uic 
+from openpyxl import load_workbook 
+import os
+
+import random 
+import sys 
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) 
+UI_PATH = "titlemaker.ui" 
+
+class MainDialog(QDialog): 
+    def __init__(self): 
+        QDialog.__init__(self, None) 
+        uic.loadUi(os.path.join(BASE_DIR, UI_PATH), self) 
+        self.titlemake.clicked.connect(self.titlemake_func) 
+        self.savetotext.clicked.connect(self.savetotext_func) 
+        
+    def titlemake_func(self): 
+        excel_add = self.exceladd.text() 
+        if excel_add == "": 
+            self.status_label.setText("엑셀 주소를 입력해 주세요.") 
+            
+        else: 
+            try: 
+                self.status_label.setText("제목 생성 중입니다.") 
+                wb = load_workbook(excel_add + '/textbench.xlsx') 
+                active_sheet = wb['제목소스'] 
+                keywords = active_sheet['A'] 
+                related_keyword_1s = active_sheet['B'] 
+                related_keyword_2s = active_sheet['C'] 
+                related_keyword_3s = active_sheet['D'] 
+                main_keyword_lists = [] 
+                related_keyword_lists_1 = [] 
+                related_keyword_lists_2 = [] 
+                related_keyword_lists_3 = [] 
+                total_title = [] 
+                related_key_1 = "" 
+                related_key_2 = "" 
+                related_key_3 = "" 
+                
+            except: 
+                self.status_label.setText("엑셀 주소 오류입니다.") 
+                
+            else: 
+                for keyword in keywords: 
+                    main_keyword_lists.append(keyword.value) 
+                del main_keyword_lists[0]
+                main_keyword_lists = list(filter(None, main_keyword_lists)) 
+
+                for related_keyword_1 in related_keyword_1s: 
+                    related_keyword_lists_1.append(related_keyword_1.value) 
+                    
+                del related_keyword_lists_1[0] 
+                related_keyword_lists_1 = list(filter(None, related_keyword_lists_1)) 
+                for related_keyword_2 in related_keyword_2s: 
+                    related_keyword_lists_2.append(related_keyword_2.value) 
+                    
+                del related_keyword_lists_2[0] 
+                related_keyword_lists_2 = list(filter(None, related_keyword_lists_2)) 
+                
+                for related_keyword_3 in related_keyword_3s: 
+                    related_keyword_lists_3.append(related_keyword_3.value) 
+                del related_keyword_lists_3[0] 
+                
+                related_keyword_lists_3 = list(filter(None, related_keyword_lists_3)) 
+                for main_keyword_list in main_keyword_lists: 
+                    related_key_1 = random.choice(related_keyword_lists_1) 
+                    related_key_2 = random.choice(related_keyword_lists_2) 
+                    related_key_3 = random.choice(related_keyword_lists_3) 
+                    total_title.append(main_keyword_list + " " + related_key_1 + " " + related_key_2 + " " + related_key_3) 
+                total_title_out = '\n'.join(total_title) 
+                self.title_result.setPlainText(total_title_out) 
+                self.status_label.setText("제목 생성 완료입니다.") 
+                
+    def savetotext_func(self): 
+        excel_add = self.exceladd.text() 
+        if excel_add == "":
+            self.status_label.setText("엑셀 주소를 입력해 주세요.") 
+                
+        else: 
+            try: 
+                self.status_label.setText("텍스트 저장 중입니다.") 
+                str_data = self.title_result.toPlainText() 
+                f = open(excel_add + "/제목자료.txt", "w") 
+                f.write(str_data) 
+                f.close() 
+                self.status_label.setText("텍스트 저장 완료입니다.") 
+                    
+            except: 
+                self.status_label.setText("저장 오류입니다.") 
+                    
+QApplication.setStyle("fusion") 
+app = QApplication(sys.argv) 
+main_dialog = MainDialog() 
+main_dialog.show() 
+sys.exit(app.exec_())
+
